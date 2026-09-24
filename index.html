@@ -227,17 +227,18 @@
   <div class="modal" id="modal"></div>
 </div>
 
+<script src="game-logic.js"></script>
 <script>
 /* ============================================================
    WIZARD — full game (bidding, trump, scoring, 20 rounds)
-   3 players: You + 2 bots. Vanilla JS, single file.
+   3 players: You + 2 bots. Vanilla JS, single file (plus the
+   pure game-logic helpers in game-logic.js, shared with tests).
    ============================================================ */
 
-const SUITS = ['♠','♥','♦','♣'];
-const SUIT_NAME = {'♠':'Spades','♥':'Hearts','♦':'Diamonds','♣':'Clubs'};
-const RED = new Set(['♥','♦']);
-const RANK_NAME = {1:'1',11:'Jack',12:'Queen',13:'King'};
-const WIZARD='W', JESTER='J';
+const { SUITS, SUIT_NAME, RED, RANK_NAME, WIZARD, JESTER,
+        makeDeck, shuffle, cardLabel, shortLabel, sortHand,
+        legalCards, trickWinner,
+        playStrength, lowestDump, currentTrickStrength, cardBeatsCurrent } = GameLogic;
 
 const players = [
   {id:0, name:'You',   human:true,  hand:[], bid:0, tricks:0, total:0},
@@ -255,31 +256,6 @@ let state = {
   bidTotal:0, cardDelay:850,
   busy:false, gen:0, awaitingHuman:false,
 };
-
-/* ---------- deck helpers ---------- */
-function makeDeck(){
-  const d=[];
-  for(const s of SUITS) for(let r=1;r<=13;r++) d.push({t:'n', suit:s, rank:r});
-  for(let i=0;i<4;i++) d.push({t:WIZARD});
-  for(let i=0;i<4;i++) d.push({t:JESTER});
-  return d;
-}
-function shuffle(a){
-  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-  return a;
-}
-function cardLabel(c){
-  if(c.t===WIZARD) return 'a Wizard';
-  if(c.t===JESTER) return 'a Jester';
-  const r = RANK_NAME[c.rank] || c.rank;
-  return `${r} of ${SUIT_NAME[c.suit]}`;
-}
-function shortLabel(c){
-  if(c.t===WIZARD) return 'Wizard';
-  if(c.t===JESTER) return 'Jester';
-  const r = RANK_NAME[c.rank] || c.rank;
-  return `${r}${c.suit}`;
-}
 
 /* ---------- rendering ---------- */
 function cardEl(c, {small=false}={}){
@@ -363,11 +339,6 @@ function renderHand(){
      state.round>0 ? `${me.hand.length} card${me.hand.length!==1?'s':''}` : '';
 }
 
-function sortHand(hand){
-  const order = c => c.t===WIZARD?100 : c.t===JESTER?-1 : (SUITS.indexOf(c.suit)*20 + c.rank);
-  return [...hand].sort((a,b)=>order(a)-order(b));
-}
-
 function updateHeader(){
   document.getElementById('hdrRound').textContent = state.round||'–';
   document.getElementById('hdrCards').textContent = state.round||'–';
@@ -395,39 +366,6 @@ function log(msg, cls=''){
 function refreshAll(winnerId=null){ renderScoreboard(); renderTrick(winnerId); renderHand(); updateHeader(); }
 const sleep = ms => new Promise(r=>setTimeout(r, ms));
 function delay(){ return sleep(state.cardDelay); }
-
-/* ---------- trick logic ---------- */
-function legalCards(hand){
-  // Wizards & Jesters always legal. If a led suit exists and you hold it, must follow (but W/J still allowed).
-  if(state.ledSuit===null) return [...hand];
-  const hasLed = hand.some(c=>c.t==='n' && c.suit===state.ledSuit);
-  if(!hasLed) return [...hand];
-  return hand.filter(c=>c.t!=='n' || c.suit===state.ledSuit);
-}
-
-function trickWinner(trick, trump){
-  // First Wizard wins.
-  for(const pl of trick) if(pl.card.t===WIZARD) return pl.player;
-  // Determine led suit (first non-jester card; wizard handled above).
-  let led=null;
-  for(const pl of trick){ if(pl.card.t==='n'){ led=pl.card.suit; break; } }
-  // If all jesters, first jester wins.
-  if(led===null){
-    for(const pl of trick) if(pl.card.t===JESTER) return pl.player;
-    return trick[0].player;
-  }
-  let best=null;
-  for(const pl of trick){
-    const c=pl.card;
-    if(c.t!=='n') continue;
-    const isTrump = trump && c.suit===trump;
-    const isLed = c.suit===led;
-    if(!isTrump && !isLed) continue;
-    const score=(isTrump?100:0)+c.rank;
-    if(best===null || score>best.score) best={player:pl.player, score};
-  }
-  return best? best.player : trick[0].player;
-}
 
 /* ---------- game flow ---------- */
 function newGame(){
@@ -676,7 +614,7 @@ let humanCardResolver=null;
 function waitForHumanCard(){ return new Promise(r=>{humanCardResolver=r;}); }
 function humanPlay(card){
   if(state.phase!=='playing' || state.turn!==0 || !state.awaitingHuman) return;
-  const legal=legalCards(players[0].hand);
+  const legal=legalCards(players[0].hand, state.ledSuit);
   if(!legal.includes(card)) return;
   state.awaitingHuman=false;
   commitPlay(0, card);
@@ -684,16 +622,16 @@ function humanPlay(card){
 }
 
 function botPlay(p){
-  const legal=legalCards(p.hand);
+  const legal=legalCards(p.hand, state.ledSuit);
   const trump=state.trump;
   const needMore = p.tricks < p.bid;      // wants to win more
   const satisfied = p.tricks >= p.bid;    // wants to avoid winning
 
   // Evaluate current best on table (excluding this play)
-  const curWinnerVal = currentTrickStrength(trump);
+  const curWinnerVal = currentTrickStrength(state.trick, trump);
 
   // helper: does this card currently beat the table?
-  const beats = c => cardBeatsCurrent(c, trump, curWinnerVal);
+  const beats = c => cardBeatsCurrent(c, trump, curWinnerVal, state.trick.length);
 
   const winners = legal.filter(beats);
   const losers  = legal.filter(c=>!beats(c));
@@ -716,56 +654,6 @@ function botPlay(p){
     // forced to win: win as cheaply as possible
     return legal.sort((a,b)=>playStrength(a,trump)-playStrength(b,trump))[0];
   }
-}
-
-function playStrength(c, trump){
-  if(c.t===WIZARD) return 1000;
-  if(c.t===JESTER) return -1000;
-  return (trump && c.suit===trump?100:0)+c.rank;
-}
-function lowestDump(legal, trump){
-  const jesters=legal.filter(c=>c.t===JESTER);
-  if(jesters.length) return jesters[0];
-  // lowest non-trump if possible
-  const nonTrump=legal.filter(c=>c.t==='n' && (!trump||c.suit!==trump));
-  const pool=nonTrump.length?nonTrump:legal.filter(c=>c.t!==WIZARD);
-  const usePool=pool.length?pool:legal;
-  return usePool.sort((a,b)=>playStrength(a,trump)-playStrength(b,trump))[0];
-}
-function currentTrickStrength(trump){
-  if(state.trick.length===0) return -Infinity;
-  // is there a wizard already?
-  if(state.trick.some(pl=>pl.card.t===WIZARD)) return Infinity;
-  let led=null;
-  for(const pl of state.trick){ if(pl.card.t==='n'){ led=pl.card.suit; break; } }
-  let best=-Infinity;
-  for(const pl of state.trick){
-    const c=pl.card;
-    if(c.t!=='n') continue;
-    const isTrump=trump&&c.suit===trump;
-    const isLed=c.suit===led;
-    if(!isTrump && !isLed) continue;
-    best=Math.max(best,(isTrump?100:0)+c.rank);
-  }
-  return {val:best, led, hasReal: best>-Infinity};
-}
-function cardBeatsCurrent(c, trump, cur){
-  if(state.trick.length===0) return true; // leading: "wins" for now
-  if(cur===Infinity) return c.t===WIZARD; // only a wizard beats a wizard
-  if(c.t===WIZARD) return true;
-  if(c.t===JESTER) return false;
-  // determine led suit
-  let led = (cur && cur.led!==undefined)? cur.led : null;
-  if(led===null){
-    // table is all jesters so far → any real card leads/wins
-    return true;
-  }
-  const best = cur.hasReal? cur.val : -Infinity;
-  const isTrump=trump&&c.suit===trump;
-  const isLed=c.suit===led;
-  if(!isTrump && !isLed) return false;
-  const v=(isTrump?100:0)+c.rank;
-  return v>best;
 }
 
 /* ---------- scoring ---------- */
