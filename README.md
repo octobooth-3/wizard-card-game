@@ -31,7 +31,7 @@ python3 -m http.server 8000
 
 - 🂠 **Deck (60 cards):** four suits (♠ ♥ ♦ ♣) ranked 1–13, plus 4 **Wizards** 🧙 and 4 **Jesters** 🃏.
 - 🔁 **20 rounds.** Round *n* deals *n* cards to each of the 3 players; the dealer rotates.
-- ♣️ **Trump:** after dealing, the next card is flipped. A Wizard → the dealer chooses trump;
+- 👑 **Trump:** after dealing, the next card is flipped. A Wizard → the dealer chooses trump;
   a Jester (or an empty deck in the final round) → no trump; otherwise that card's suit is trump.
 - 🔮 **Bidding:** each player predicts how many tricks they'll take (0..n).
 - 🎯 **Trick play:** you must follow the led suit if you can; Wizards and Jesters may be played
