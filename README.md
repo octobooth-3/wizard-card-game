@@ -3,7 +3,8 @@
 A browser-based implementation of the classic trick-prediction card game **Wizard**,
 for one human player against two automated opponents (Bot A & Bot B).
 
-It's a single self-contained `index.html` — **no build step, no dependencies**.
+The UI is a single self-contained `index.html` — **no build step, no dependencies** to
+play. Core game rules live in `game-logic.js` so they can be unit tested with Node.
 
 ## 🎮 Play
 
@@ -45,3 +46,16 @@ python3 -m http.server 8000
 - 🔮 **Bidding:** estimates likely tricks from Wizards, high trumps, and off-suit high cards.
 - ♟️ **Card play (bid-aware):** wins as cheaply as possible when still short of its bid, and
   ducks/discards when its bid is already met — always respecting the follow-suit rule.
+
+## ✅ Tests & CI
+
+Deck building, card labels, follow-suit rules, trick winners, and bot heuristics are
+covered by unit tests in `test/game-logic.test.js`, run with Node's built-in test runner
+(requires Node ≥ 18, no extra dependencies):
+
+```bash
+npm test
+```
+
+Every push and pull request to `master` runs this suite in GitHub Actions
+(see `.github/workflows/ci.yml`).

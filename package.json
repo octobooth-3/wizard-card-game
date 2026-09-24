@@ -1,0 +1,11 @@
+{
+  "name": "wizard-card-game",
+  "private": true,
+  "description": "A browser-based implementation of the trick-prediction card game Wizard.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
